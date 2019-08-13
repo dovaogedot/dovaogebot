@@ -18,9 +18,15 @@ log.debug('Log initialized.')
 # =============== #
 db = Database('sqlite', 'dovaogebot.db', create_db=True)
 
+class Chat(db.Entity):
+	"""telegram chat"""
+
+	id = PrimaryKey(int, size=64)
+	title = Required(str)
+
 
 class User(db.Entity):
-	"""Telegram user."""
+	"""telegram user"""
 
 	id = PrimaryKey(int)
 	first_name = Required(str)
