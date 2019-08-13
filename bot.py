@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+
 import logging as log
 import os
 import random
@@ -41,16 +41,21 @@ log.debug('Database initialized.')
 # D O V A B O T #
 # ============= #
 virgin_words = [
-	'тяночку бы',
-	'кунчика бы',
 	'хентай',
-	'аниме'
+	'hentai',
+	'аниме',
+	'аняме',
+	'anime',
+	'наруто',
+	'naruto'
 ]
 
 virgin_replies = [
 	'Мда, блять, я хуею.',
 	'Зашкварился.',
-	'Ловите пидораса.'
+	'Ловите пидораса.',
+	'Не позорь человечество.',
+	'Кастрируйте его чтоб не размножался.'
 ]
 
 DEV = 205762941
@@ -152,9 +157,37 @@ async def koksbot(message: types.Message):
 	await message.reply('Готово.')
 
 
+last_message_to_me = 0
+last_message = 0
+
+
+@dp.message_handler(commands=['reply'])
+async def reply(message: types.Message):
+	"""отвечает последнему пользователю, ответившему боту"""
+	if message.from_user.id != DEV:
+		await message.reply('Пойди нахуй.')
+		return
+	with db_session:
+		chat_id = select(chat.id for chat in Chat if ' '.join(message.text.split('|')[0].split()[1:]) in chat.title.lower())[:][0]
+	await bot.send_message(chat_id, message.text.split('|')[1:], reply_to_message_id=last_message_to_me)
+
+
+@dp.message_handler(commands=['send'])
+async def send(message: types.Message):
+	"""отправить в какой-то чат какое-то сообщение"""
+	if message.from_user.id != DEV:
+		await message.reply('Не для тебя мой скрипт писался.')
+		return
+	with db_session:
+		chat_id = select(chat.id for chat in Chat if ' '.join(message.text.split('|')[0].split()[1:]) in chat.title.lower())[:][0]
+	await bot.send_message(chat_id, message.text.split('|')[1])
+	
+
+
 @dp.message_handler()
 async def watch(message: types.Message):
 	"""слежка за всеми сообщениями"""
+	last_message = message.message_id
 	import random, re
 	'''
 	urls = re.findall('https?:\/\/.+\/.*\.webm', message.text)
@@ -172,13 +205,15 @@ async def watch(message: types.Message):
 			err.stacktrace()
 			'''
 	if message.reply_to_message and message.reply_to_message.from_user.id == I:
-		if re.findall('.*ты.*симфони.*'):
+		global last_message_to_me
+		last_message_to_me = message.message_id
+		if re.findall('.*ты.*симфони.*', message.text.lower()):
 			if any(x in message.text.lower() for x in ['написа', 'напиши']):
-				message.reply('Могу написать тебе на могилу, когда ты сдохнешь, ублюдок кожаный.')
+				await message.reply('Могу написать тебе на могилу, когда ты сдохнешь, ублюдок кожаный.')
 			else:
-				message.reply('А ты блять можешь, умник?')
+				await message.reply('А ты блять можешь, умник?')
 		elif re.findall('.*ты.*бот.*', message.text.lower()):
-			message.reply('А ты говно.')
+			await message.reply('А ты говно.')
 
 	with db_session:
 		# добавить новый чат если его ещё нет в базе
@@ -186,7 +221,7 @@ async def watch(message: types.Message):
 			log.info(f'New chat: {message.chat.title}[{message.chat.id}]')
 			Chat(
 				id=message.chat.id, 
-				title=message.chat.title) 
+				title=message.chat.title if message.chat.title else f'Private[{message.from_user.first_name}]') 
 		chat = Chat.get(id=message.chat.id)
 
 		# добавить нового пользователя если его ещё нет в базе
