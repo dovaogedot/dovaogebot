@@ -53,7 +53,8 @@ virgin_replies = [
 	'Ловите пидораса.'
 ]
 
-DEV = [205762941]
+DEV = 205762941
+I = 841007205
 
 bot = Bot(token=os.environ['DOVAOGEBOT'])
 dp = Dispatcher(bot)
@@ -170,13 +171,14 @@ async def watch(message: types.Message):
 			log.error(f'Could not download file from {urls[0]}. Reason: {err}')
 			err.stacktrace()
 			'''
-	if re.findall('.*ты.*симфони.*'):
-		if any(x in message.text.lower() for x in ['написа', 'напиши']):
-			message.reply('Могу написать тебе на могилу, когда ты сдохнешь, ублюдок кожаный.')
-		else:
-			message.reply('А ты блять можешь, умник?')
-	elif re.findall('.*ты.*бот.*', message.text.lower()):
-		message.reply('А ты говно.')
+	if message.reply_to_message and message.reply_to_message.from_user.id == I:
+		if re.findall('.*ты.*симфони.*'):
+			if any(x in message.text.lower() for x in ['написа', 'напиши']):
+				message.reply('Могу написать тебе на могилу, когда ты сдохнешь, ублюдок кожаный.')
+			else:
+				message.reply('А ты блять можешь, умник?')
+		elif re.findall('.*ты.*бот.*', message.text.lower()):
+			message.reply('А ты говно.')
 
 	with db_session:
 		# добавить новый чат если его ещё нет в базе
