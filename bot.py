@@ -197,5 +197,5 @@ async def watch(message: types.Message):
 			log.info('He\'s a virgin')
 			await message.reply(random.choice(virgin_replies))
 
-
-executor.start_polling(dp)
+if __name__ == '__main__':
+	executor.start_polling(dp)
