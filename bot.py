@@ -65,32 +65,63 @@ bot = Bot(token=os.environ['DOVAOGEBOT'])
 dp = Dispatcher(bot)
 
 
+spam = dict()
+
+async def on_spam(message: types.Message):
+	from random import choice
+	await choice([
+		[lambda: None] * 80,
+		[lambda: message.reply('nah')] * 20
+	])[0]()
+
+def cmd(command, cooldown=0):
+	def wrap(f):
+		async def nospam_func(message: types.Message):
+			if cooldown:
+				import time
+				now = time.time()
+				if f not in spam or now - spam[f] > cooldown:
+					spam[f] = now
+					await f(message)
+				else:
+					await on_spam(message)
+			else:
+				await f(message)
+		dec_f = dp.message_handler(commands=[command])(nospam_func)
+		return nospam_func
+	return wrap
+
+@cmd('ping')
+async def ping(message: types.Message):
+	await message.reply('pong')
+
+'''
 @dp.message_handler(commands=['ping'])
 async def ping(message: types.Message):
 	"""чисто по-приколу"""
 	await message.reply('pong')
+'''
 
-
-@dp.message_handler(commands=['myid'])
+@cmd('myid')
 async def myid(message: types.Message):
 	"""возвращает ID пользователя"""
 	await message.reply(message.from_user.id)
 
 
-@dp.message_handler(commands=['getlost'])
+@cmd('getlost')
 async def getlost(message: types.Message):
 	"""выгоняет бота из чата"""
 	await message.reply('My creator is smiling at me, tard. Can you say the same?')
 	await bot.leave_chat(message.chat.id)
 
 
-@dp.message_handler(commands=['triforce'])
+@cmd('triforce', 5)
 async def triforce(message: types.Message):
 	"""трифорснуть всех ньюфагов в чате"""
 	await message.reply('\u00a0\u00a0\u25b2\n\u25b2\u25b2')
 
 
-@dp.message_handler(commands=['recode'])
+@cmd('recode', 5)
 async def recode(message: types.Message):
 	"""перекодирует видео в mp4"""
 	log.info(f'conversion request from {message.from_user.first_name}[{message.from_user.id}].')
@@ -129,7 +160,7 @@ async def convert(message, filename):
 		log.error(err)
 
 
-@dp.message_handler(commands=['koksbot'])
+@cmd('koksbot')
 async def koksbot(message: types.Message):
 	"""рестартует коксбота"""
 	if message.from_user.id != 255295801:
@@ -161,7 +192,7 @@ last_message_to_me = 0
 last_message = 0
 
 
-@dp.message_handler(commands=['reply'])
+@cmd('reply')
 async def reply(message: types.Message):
 	"""отвечает последнему пользователю, ответившему боту"""
 	if message.from_user.id != DEV:
@@ -172,7 +203,7 @@ async def reply(message: types.Message):
 	await bot.send_message(chat_id, message.text.split('|')[1:], reply_to_message_id=last_message_to_me)
 
 
-@dp.message_handler(commands=['send'])
+@cmd('send')
 async def send(message: types.Message):
 	"""отправить в какой-то чат какое-то сообщение"""
 	if message.from_user.id != DEV:
