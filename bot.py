@@ -64,27 +64,42 @@ I = 841007205
 bot = Bot(token=os.environ['DOVAOGEBOT'])
 dp = Dispatcher(bot)
 
-
+# дикт хранящий инфу о вызовах команд:
+# key: функция
+# value: tuple(time, count)
+#        time - время последнего успешного вызова команды
+#        count - кол-во вызовов команды когда она в куллдауне
 spam = dict()
 
-async def on_spam(message: types.Message):
+async def on_spam(f, message: types.Message):
+	"""что делать если тебя начинают заёбывать
+	:param f: команда, которую насилуют
+	:param message: собсна, сообщение адресованное боту"""
 	from random import choice
-	await choice([
-		[lambda: None] * 80,
-		[lambda: message.reply('nah')] * 20
-	])[0]()
+	try:
+		await choice([
+			[lambda: None] * 85,
+			[lambda: message.reply('Я занят.')] * 5 * spam[f][1],
+			[lambda: message.reply('Заёбывай другого бота')] * 1 * spam[f][1]
+		])[0]()
+	except TypeError: # cannot await None
+		pass
 
 def cmd(command, cooldown=0):
+	"""декоратор для предотвращения спама
+	:param command: функция-команда
+	:param cooldown: время в секундах через которое снова можно будет вызвать команду"""
 	def wrap(f):
 		async def nospam_func(message: types.Message):
 			if cooldown:
 				import time
 				now = time.time()
 				if f not in spam or now - spam[f] > cooldown:
-					spam[f] = now
+					spam[f] = (now, 0)
 					await f(message)
 				else:
-					await on_spam(message)
+					spam[f][1] += 1
+					await on_spam(f, message)
 			else:
 				await f(message)
 		dec_f = dp.message_handler(commands=[command])(nospam_func)
@@ -93,6 +108,7 @@ def cmd(command, cooldown=0):
 
 @cmd('ping')
 async def ping(message: types.Message):
+	"""чисто по-приколу"""
 	await message.reply('pong')
 
 '''
@@ -133,10 +149,10 @@ async def recode(message: types.Message):
 		return
 	m = await message.reply('Скачиваю...')
 	download_task = await message.reply_to_message.document.download(message.reply_to_message.document.file_id)
-	await convert(m, message.reply_to_message.document.file_id)
+	await _convert(m, message.reply_to_message.document.file_id)
 
 
-async def convert(message, filename):
+async def _convert(message, filename):
 	"""перекодирует видео в mp4"""
 	await message.edit_text('Конвертирую...')
 	command = ['ffmpeg', '-i', f'{filename}'] + [f'{filename}.mp4']
