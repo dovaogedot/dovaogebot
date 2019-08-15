@@ -82,6 +82,7 @@ async def on_spam(f, message: types.Message):
 			[lambda: message.reply('Я занят.')] * 5 * spam[f][1],
 			[lambda: message.reply('Заёбывай другого бота')] * 1 * spam[f][1]
 		])[0]()
+		spam[f][1] = 0
 	except TypeError: # cannot await None
 		pass
 
