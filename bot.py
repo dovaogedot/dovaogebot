@@ -23,6 +23,7 @@ class Chats(db.Entity):
 	"""telegram chat"""
 	id = PrimaryKey(int, size=64)
 	title = Required(str)
+	shizmod = Required(int, default=0)
 
 
 class Users(db.Entity):
@@ -30,7 +31,7 @@ class Users(db.Entity):
 	id = PrimaryKey(int)
 	first_name = Required(str)
 	last_name = Optional(str)
-	username = Optional(str)\
+	username = Optional(str)
 
 
 class Words(db.Entity):
@@ -94,13 +95,17 @@ async def on_spam(f, message: types.Message):
 	:param f: команда, которую насилуют
 	:param message: собсна, сообщение адресованное боту
 	"""
-	from random import choice
+	import numpy as np
 	try:
-		await choice([
-			[lambda: None] * 85,
-			[lambda: message.reply('Я занят.')] * 5 * spam[f][1],
-			[lambda: message.reply('Заёбывай другого бота')] * 1 * spam[f][1]
-		])[0]()
+		await np.choice(
+			[[lambda: None],
+			[lambda: message.reply('Я занят.')],
+			[lambda: message.reply('Заёбывай другого бота')]],
+
+			[200, 
+			5 * spam[f][1], 
+			1 * spam[f][1]]
+		)[0]()
 		spam[f][1] = 0
 	except TypeError: # cannot await None
 		pass
@@ -118,7 +123,7 @@ def cmd(command, cooldown=0):
 			if cooldown:
 				import time
 				now = time.time()
-				if f not in spam or now - spam[f][0] > cooldown:
+				if f not in spam or now - spam[f][0] > cooldown or message.from_user.id == DEV:
 					spam[f] = [now, 0]
 					await f(message)
 				else:
@@ -280,7 +285,7 @@ async def send(message: types.Message):
 	await bot.send_message(chat_id, message.text.split('|')[1])
 
 
-story_length = 10
+story_length = 20
 
 @cmd('story_length')
 async def _story_length(message: types.Message):
@@ -295,13 +300,15 @@ async def _story_length(message: types.Message):
 		await message.reply('Додик?')
 
 
-@cmd('story')
-async def story(message: types.Message):
+
+def make_sentence(start=''):
 	"""
-	время охуительных историй
+	делаем фразы
 	"""
 	import numpy as np, itertools as it, operator as op
 	from collections import defaultdict
+
+	# сочинить словарь из базы со словами
 	with db_session:
 		words = select((word.name, word.used_first, next.next.name, next.count) for word in Words for next in Nexts if word==next.first)[:]
 		#vocab = dict(list((i, sum(j, tuple())) for i,j in it.groupby(words, key=op.itemgetter(0))))
@@ -311,20 +318,70 @@ async def story(message: types.Message):
 			if 'nexts' not in vocab[word]:
 				vocab[word]['nexts'] = dict()
 			vocab[word]['nexts'][next] = count
-	def make_sentence(sentence=''):
+
+	def make(sentence=''):
 		if len(sentence.split()) > story_length:
 			return sentence
 		if not sentence:
-			return make_sentence(np.random.choice([x for x in vocab.keys()], 1)[0])
+			return make(np.random.choice([x for x in vocab.keys()], 1)[0].title())
 		try:
-			nexts = vocab[sentence.split()[-1]]['nexts']
+			nexts = vocab[sentence.split()[-1].lower()]['nexts']
 		except KeyError:
 			return sentence
 		sum_p = sum(nexts.values())
-		return make_sentence(sentence + ' ' + np.random.choice([word for word in nexts.keys()], p=[weight/sum_p for weight in nexts.values()]))
-			
-	await message.reply(make_sentence())
+		return make(sentence + ' ' + np.random.choice([word for word in nexts.keys()], p=[weight/sum_p for weight in nexts.values()]))
 
+	return make(start) + '.'
+
+
+@cmd('story')
+async def story(message: types.Message):
+	"""
+	время охуительных историй
+	"""
+
+	# проверяем на шизмод	
+	with db_session:
+		story = make_sentence()
+		try:
+			if Chats[message.chat.id].shizmod == 0:
+				await message.reply(story)
+			else:
+				from googletrans import Translator
+				trans = Translator()
+				await message.reply(trans.translate(story, src='az', dest='ru').text + f'\n({story})')
+		except ObjectNotFound:
+			Chats(id=message.chat.id, 
+				  title=message.chat.title if message.chat.title else f'Private[{message.from_user.first_name}]')
+
+rate = 0
+
+@cmd('rate')
+async def rate(message: types.Message):
+	"""
+	устанавливает вероятность случайного пиздежа в районе [0..1]
+	"""
+	with db_session:
+		try:
+			global rate
+			rate = int(message.text.split()[1])
+			if 0 > rate > 100:
+				raise Exception()
+			Chats[message.chat.id].rate = rate
+			await message.reply('Ок.')
+		except Exception as ex:
+			log.info(ex)
+			await message.reply('Ебобо? Число дай от 0 до 100.')
+
+
+@cmd('shizmod')
+async def shizmod(message: types.Message):
+	"""
+	переключает шизмод
+	"""
+	with db_session:
+		Chats[message.chat.id].shizmod = not Chats[message.chat.id].shizmod
+		await message.reply(f"Шизмод был {'включён' if Chats[message.chat.id].shizmod else 'выключен'}.")
 
 
 @dp.message_handler()
@@ -337,6 +394,7 @@ async def watch(message: types.Message):
 	global last_message
 	last_message = message.message_id
 
+	# запоминаем базар
 	with db_session:
 		words = re.sub(r'[^\w0-9 ]+', '', message.text.lower()).split()
 		for i in range(len(words)):
@@ -351,17 +409,7 @@ async def watch(message: types.Message):
 					commit()
 				Nexts.get(first=Words[words[i-1]], next=word).count += 1
 	
-	if message.reply_to_message and message.reply_to_message.from_user.id == I:
-		global last_message_to_me
-		last_message_to_me = message.message_id
-		if re.findall('.*ты.*симфони.*', message.text.lower()):
-			if any(x in message.text.lower() for x in ['написа', 'напиши']):
-				await message.reply('Могу написать тебе на могилу, когда ты сдохнешь, ублюдок кожаный.')
-			else:
-				await message.reply('А ты блять можешь, умник?')
-		elif re.findall('.*ты.*бот.*', message.text.lower()):
-			await message.reply('А ты говно.')
-
+	# собираем инфу для продажи цукербергу
 	with db_session:
 		# добавить новый чат если его ещё нет в базе
 		if not Chats.exists(id=message.chat.id):
@@ -382,11 +430,37 @@ async def watch(message: types.Message):
 		user = Users[message.from_user.id]
 		log.info(f'{chat.title}[{chat.id}]: {user.first_name}[{user.id}]: {message.text}')
 
-		# детектим омежку и унижаем его
-		if any((x in message.text.lower()) for x in virgin_words):
-			log.info('He\'s a virgin')
-			await message.reply(random.choice(virgin_replies))
+	# анализируем последнее сообщение ко мне (пока глобально)
+	# TODO: запоминать для каждого чата
+	if message.reply_to_message and message.reply_to_message.from_user.id == I:
+		global last_message_to_me
+		last_message_to_me = message.message_id
+		if re.findall('.*ты.*симфони.*', message.text.lower()):
+			if any(x in message.text.lower() for x in ['написа', 'напиши']):
+				await message.reply('Могу написать тебе на могилу, когда ты сдохнешь, ублюдок кожаный.')
+			else:
+				await message.reply('А ты блять можешь, умник?')
+		elif re.findall('.*ты.*бот.*', message.text.lower()):
+			await message.reply('А ты говно.')
+		else:
+			await message.reply(make_sentence(random.choice(message.text.lower().split()).title()))
+		return
 
+	if '@dovaogebot' in message.text.lower():
+		await message.reply(make_sentence(random.choice(message.text.lower().replace('@dovaogebot', '').split()).title()))
+		return
+
+	global rate
+	if random.random() * 100 < rate:
+		await message.reply(make_sentence(random.choice(message.text.lower().split()).title()))
+		return
+
+
+	# детектим омежку и унижаем его
+	# if any((x in message.text.lower()) for x in virgin_words):
+		#log.info('He\'s a virgin')
+		#await message.reply(random.choice(virgin_replies))
+	
 
 if __name__ == '__main__':
 	from asyncio import get_event_loop
