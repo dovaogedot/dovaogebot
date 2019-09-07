@@ -251,7 +251,7 @@ async def reply_last(message: types.Message):
 	"""
 	отвечает последнему пользователю, написавшему в чат
 	"""
-	if message.from_ser.id != DEV:
+	if message.from_user.id != DEV:
 		await message.reply('Пойди нахуй.')
 		return
 	with db_session:
