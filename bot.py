@@ -320,16 +320,23 @@ def make_sentence(start=''):
 			vocab[word]['nexts'][next] = count
 
 	def make(sentence=''):
-		if len(sentence.split()) > story_length:
+		if len(sentence.split()) > story_length - np.random.rand() * story_length / 4:
 			return sentence
 		if not sentence:
-			return make(np.random.choice([x for x in vocab.keys()], 1)[0].title())
+			return make(np.random.choice([x for x in vocab if vocab[x]['nexts']], 1)[0].title())
 		try:
 			nexts = vocab[sentence.split()[-1].lower()]['nexts']
+			sum_p = sum(nexts.values())
+			return make(sentence + ' ' + np.random.choice([word for word in nexts.keys()], p=[weight/sum_p for weight in nexts.values()]))
 		except KeyError:
-			return sentence
-		sum_p = sum(nexts.values())
-		return make(sentence + ' ' + np.random.choice([word for word in nexts.keys()], p=[weight/sum_p for weight in nexts.values()]))
+			selection = []
+			for word in vocab:
+				try:
+					if vocab[word]['nexts']:
+						selection.append(word)
+				except KeyError:
+					pass
+			return make(sentence + '. ' + np.random.choice(selection).title())
 
 	return make(start) + '.'
 
@@ -357,9 +364,9 @@ async def story(message: types.Message):
 rate = 0
 
 @cmd('rate')
-async def rate(message: types.Message):
+async def _rate(message: types.Message):
 	"""
-	устанавливает вероятность случайного пиздежа в районе [0..1]
+	устанавливает вероятность случайного пиздежа в районе [0..100]
 	"""
 	with db_session:
 		try:
@@ -443,16 +450,16 @@ async def watch(message: types.Message):
 		elif re.findall('.*ты.*бот.*', message.text.lower()):
 			await message.reply('А ты говно.')
 		else:
-			await message.reply(make_sentence(random.choice(message.text.lower().split()).title()))
+			await message.reply(make_sentence(random.choice(re.sub(r'[^\w0-9 ]+', '', message.text.lower()).split()).title()))
 		return
 
 	if '@dovaogebot' in message.text.lower():
-		await message.reply(make_sentence(random.choice(message.text.lower().replace('@dovaogebot', '').split()).title()))
+		await message.reply(make_sentence(random.choice(re.sub(r'[^\w0-9 ]+', '', message.text.lower()).replace('dovaogebot', '').split()).title()))
 		return
 
 	global rate
 	if random.random() * 100 < rate:
-		await message.reply(make_sentence(random.choice(message.text.lower().split()).title()))
+		await message.reply(make_sentence(random.choice(re.sub(r'[^\w0-9 ]+', '', message.text.lower()).split()).title()))
 		return
 
 
